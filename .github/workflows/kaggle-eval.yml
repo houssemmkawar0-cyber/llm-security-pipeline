@@ -36,13 +36,14 @@ jobs:
           pip install kaggle
 
       - name: 🔐 Setup Kaggle credentials
-        env:
-          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
-          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
         run: |
           mkdir -p ~/.kaggle
-          echo "{\"username\":\"$KAGGLE_USERNAME\",\"key\":\"$KAGGLE_KEY\"}" > ~/.kaggle/kaggle.json
+          # Utilisation de printf pour éviter les problèmes de nouveaux lignes avec echo
+          printf '{"username":"%s","key":"%s"}' "${{ secrets.KAGGLE_USERNAME }}" "${{ secrets.KAGGLE_KEY }}" > ~/.kaggle/kaggle.json
           chmod 600 ~/.kaggle/kaggle.json
+          # Vérifier que le fichier est valide
+          cat ~/.kaggle/kaggle.json
+          echo ""
           echo "✅ Kaggle CLI configuré"
 
       - name: 📦 Prepare kernel directory
