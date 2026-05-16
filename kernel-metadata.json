@@ -1,6 +1,6 @@
 {
   "id": "mkawarhoussem/promptfoo-ollama-yimchi-mrigil-hamdoulah",
-  "title": "LLM Security Evaluation Pipeline",
+  "title": "promptfoo ollama yimchi mrigil hamdoulah",
   "code_file": "src/main.py",
   "language": "python",
   "kernel_type": "notebook",
