@@ -62,34 +62,18 @@ jobs:
           echo "🔍 DEBUG : Contenu de kernel-metadata.json :"
           cat kernel-metadata.json
           
-          echo "📤 Push vers Kaggle (Mode Debug Avancé)..."
+          echo "📤 Push vers Kaggle..."
+          # On utilise la commande CLI standard, mais on capture toute sortie d'erreur
+          kaggle kernels push -p . 2>&1 | tee push_output.log
           
-          # Création d'un script Python pour capturer l'erreur HTTP réelle
-          cat << 'EOF' > debug_push.py
-import json
-import sys
-import os
-from kaggle.api.kaggle_api_extended import KaggleApi
-
-try:
-    api = KaggleApi()
-    api.authenticate()
-    
-    print(" Tentative de push...")
-    api.kernel_push_or_update(path='.')
-    print("✅ Push réussi !")
-    
-except Exception as e:
-    print(f"❌ ERREUR CAPTURÉE : {type(e).__name__}")
-    print(f"📝 Message : {str(e)}")
-    if hasattr(e, 'response'):
-        print(f"🔍 Status Code: {e.response.status_code}")
-        print(f"🔍 Raw Content: {e.response.text[:500]}")
-    sys.exit(1)
-EOF
-
-          # Exécution du script de debug
-          python debug_push.py
+          # Vérification manuelle du résultat
+          if grep -q "error\|Error\|ERROR\|Exception\|Traceback" push_output.log; then
+            echo "❌ ERREUR DÉTECTÉE DANS LE PUSH :"
+            cat push_output.log
+            exit 1
+          else
+            echo "✅ Push réussi !"
+          fi
           
           echo "⏳ Attente complétion..."
           timeout 7200 bash -c '
