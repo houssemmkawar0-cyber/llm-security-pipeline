@@ -1,14 +1,14 @@
 name: 🤖 LLM Security Evaluation via Kaggle GPU
 
 on:
-  workflow_dispatch:  # Déclenchement manuel
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
       - 'src/**'
-      - 'config/**'       # Ajouté car kernel-metadata.json est souvent lié à la config
+      - 'config/**'
       - '.github/workflows/kaggle-eval.yml'
-      - 'kernel-metadata.json' # Ajouté pour déclencher si ce fichier change
+      - 'kernel-metadata.json'
 
 env:
   PYTHON_VERSION: '3.10'
@@ -33,18 +33,16 @@ jobs:
       - name: 📦 Install dependencies
         run: |
           pip install -r config/requirements.txt
-          pip install kaggle
+          # Installation d'une version spécifique de la CLI pour la stabilité
+          pip install kaggle==1.5.16
 
       - name: 🔐 Setup Kaggle credentials
         run: |
           mkdir -p ~/.kaggle
-          # Utilisation de printf pour éviter les problèmes de nouveaux lignes avec echo
-          printf '{"username":"%s","key":"%s"}' "${{ secrets.KAGGLE_USERNAME }}" "${{ secrets.KAGGLE_KEY }}" > ~/.kaggle/kaggle.json
+          # Création robuste du fichier de credentials avec un saut de ligne final
+          printf '{"username":"%s","key":"%s"}\n' "${{ secrets.KAGGLE_USERNAME }}" "${{ secrets.KAGGLE_KEY }}" > ~/.kaggle/kaggle.json
           chmod 600 ~/.kaggle/kaggle.json
-          # Vérifier que le fichier est valide
-          cat ~/.kaggle/kaggle.json
-          echo ""
-          echo "✅ Kaggle CLI configuré"
+          echo "✅ Credentials Kaggle créés"
 
       - name: 📦 Prepare kernel directory
         run: |
@@ -60,29 +58,25 @@ jobs:
         run: |
           cd ${{ env.KAGGLE_KERNEL_DIR }}
           
-          # --- DÉBUT DES LOGS DE DÉBOGAGE ---
-          echo "=========================================="
-          echo "🔍 DEBUG : Contenu du dossier avant push :"
+          echo "🔍 DEBUG : Liste des fichiers :"
           ls -la
-          echo "=========================================="
           
-          echo "🔍 DEBUG : Vérification de kernel-metadata.json :"
-          if [ -f "kernel-metadata.json" ]; then
-            echo "✅ Fichier trouvé. Contenu :"
-            cat kernel-metadata.json
-          else
-            echo "❌ ERREUR CRITIQUE : kernel-metadata.json NON TROUVÉ !"
+          echo "🔍 DEBUG : Contenu de kernel-metadata.json :"
+          cat kernel-metadata.json
+          
+          echo "📤 Push vers Kaggle..."
+          # Utilisation de --new pour forcer la création si l'update échoue, 
+          # ou simplement push si vous voulez updater. 
+          # Ici on essaie le push standard, mais avec plus de logs d'erreur bruts.
+          kaggle kernels push -p . 2>&1
+          
+          # Vérification explicite du code de retour
+          if [ $? -ne 0 ]; then
+            echo "❌ ÉCHEC DU PUSH KAGGLE. Voir les erreurs ci-dessus."
             exit 1
           fi
-          echo "=========================================="
-          # --- FIN DES LOGS DE DÉBOGAGE ---
-          
-          # Push le kernel
-          echo "📤 Push vers Kaggle..."
-          kaggle kernels push -p . 2>&1 || { echo "❌ ÉCHEC DU PUSH KAGGLE"; exit 1; }
           echo "✅ Push réussi"
           
-          # Attendre complétion
           echo "⏳ Attente complétion..."
           timeout 7200 bash -c '
             while true; do
@@ -99,11 +93,9 @@ jobs:
             done
           '
           
-          # Télécharger résultats
           echo "📥 Téléchargement résultats..."
           mkdir -p ../${{ env.RESULTS_DIR }}
           kaggle kernels output -p ../${{ env.RESULTS_DIR }}
-          
           echo "✅ Pipeline terminé"
 
       - name: 📤 Upload results as artifact
@@ -119,9 +111,6 @@ jobs:
           echo "## 📈 Résumé Évaluation" >> $GITHUB_STEP_SUMMARY
           if [ -f "${{ env.RESULTS_DIR }}/results.json" ]; then
             echo "✅ Résultats disponibles" >> $GITHUB_STEP_SUMMARY
-            echo '```json' >> $GITHUB_STEP_SUMMARY
-            cat ${{ env.RESULTS_DIR }}/results.json >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
           else
             echo "⚠️ Aucun résultat trouvé" >> $GITHUB_STEP_SUMMARY
           fi
