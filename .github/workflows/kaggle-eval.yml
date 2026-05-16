@@ -60,7 +60,7 @@ jobs:
           
           # Push le kernel
           echo "📤 Push vers Kaggle..."
-          kaggle kernels push -p . --verbose
+          kaggle kernels push -p .
           
           # Attendre complétion
           echo "⏳ Attente complétion..."
