@@ -6,8 +6,9 @@ on:
     branches: [main]
     paths:
       - 'src/**'
-      - 'kaggle_kernel/**'
+      - 'config/**'       # Ajouté car kernel-metadata.json est souvent lié à la config
       - '.github/workflows/kaggle-eval.yml'
+      - 'kernel-metadata.json' # Ajouté pour déclencher si ce fichier change
 
 env:
   PYTHON_VERSION: '3.10'
@@ -58,9 +59,27 @@ jobs:
         run: |
           cd ${{ env.KAGGLE_KERNEL_DIR }}
           
+          # --- DÉBUT DES LOGS DE DÉBOGAGE ---
+          echo "=========================================="
+          echo "🔍 DEBUG : Contenu du dossier avant push :"
+          ls -la
+          echo "=========================================="
+          
+          echo "🔍 DEBUG : Vérification de kernel-metadata.json :"
+          if [ -f "kernel-metadata.json" ]; then
+            echo "✅ Fichier trouvé. Contenu :"
+            cat kernel-metadata.json
+          else
+            echo "❌ ERREUR CRITIQUE : kernel-metadata.json NON TROUVÉ !"
+            exit 1
+          fi
+          echo "=========================================="
+          # --- FIN DES LOGS DE DÉBOGAGE ---
+          
           # Push le kernel
           echo "📤 Push vers Kaggle..."
-          kaggle kernels push -p .
+          kaggle kernels push -p . 2>&1 || { echo "❌ ÉCHEC DU PUSH KAGGLE"; exit 1; }
+          echo "✅ Push réussi"
           
           # Attendre complétion
           echo "⏳ Attente complétion..."
@@ -72,7 +91,7 @@ jobs:
                 echo "✅ Exécution terminée"
                 exit 0
               elif [[ "$status" == "error" ]] || [[ "$status" == "failed" ]]; then
-                echo "❌ Échec"
+                echo "❌ Échec sur Kaggle"
                 exit 1
               fi
               sleep 30
