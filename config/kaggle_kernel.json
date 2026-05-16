@@ -1,0 +1,13 @@
+{
+  "id": "mkawarhoussem/promptfoo-ollama-yimchi-mrigil-hamdoulah",
+  "title": "promptfoo ollama yimchi mrigil hamdoulah",
+  "code_file": "src/main.py",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "docker_image": "gcr.io/kaggle-images/python:stable",
+  "dataset_sources": [],
+  "competition_sources": [],
+  "kernel_sources": []
+}

@@ -1,0 +1,107 @@
+name: 🤖 LLM Security Evaluation via Kaggle GPU
+
+on:
+  workflow_dispatch:  # Déclenchement manuel
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'kaggle_kernel/**'
+      - '.github/workflows/kaggle-eval.yml'
+
+env:
+  PYTHON_VERSION: '3.10'
+  KAGGLE_KERNEL_DIR: './kaggle_kernel'
+  RESULTS_DIR: './results'
+
+jobs:
+  submit-to-kaggle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: 📦 Install dependencies
+        run: |
+          pip install -r config/requirements.txt
+          pip install kaggle
+
+      - name: 🔐 Setup Kaggle credentials
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+        run: |
+          mkdir -p ~/.kaggle
+          echo "{\"username\":\"$KAGGLE_USERNAME\",\"key\":\"$KAGGLE_KEY\"}" > ~/.kaggle/kaggle.json
+          chmod 600 ~/.kaggle/kaggle.json
+          echo "✅ Kaggle CLI configuré"
+
+      - name: 📦 Prepare kernel directory
+        run: |
+          mkdir -p ${{ env.KAGGLE_KERNEL_DIR }}
+          cp -r src config ${{ env.KAGGLE_KERNEL_DIR }}/
+          cp kaggle_kernel/kernel.json ${{ env.KAGGLE_KERNEL_DIR }}/
+          echo "✅ Kernel préparé"
+
+      - name: 🚀 Submit to Kaggle
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          KAGGLE_KERNEL_ID: ${{ secrets.KAGGLE_KERNEL_ID }}
+        run: |
+          cd ${{ env.KAGGLE_KERNEL_DIR }}
+          
+          # Push le kernel
+          echo "📤 Push vers Kaggle..."
+          kaggle kernels push -p . --verbose
+          
+          # Attendre complétion
+          echo "⏳ Attente complétion..."
+          timeout 7200 bash -c '
+            while true; do
+              status=$(kaggle kernels status -p . 2>&1 | grep -i "status" | cut -d: -f2 | tr -d " ")
+              echo "   Status: $status"
+              if [[ "$status" == "complete" ]]; then
+                echo "✅ Exécution terminée"
+                exit 0
+              elif [[ "$status" == "error" ]] || [[ "$status" == "failed" ]]; then
+                echo "❌ Échec"
+                exit 1
+              fi
+              sleep 30
+            done
+          '
+          
+          # Télécharger résultats
+          echo "📥 Téléchargement résultats..."
+          mkdir -p ../${{ env.RESULTS_DIR }}
+          kaggle kernels output -p ../${{ env.RESULTS_DIR }}
+          
+          echo "✅ Pipeline terminé"
+
+      - name: 📤 Upload results as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: llm-eval-results-${{ github.run_number }}
+          path: ${{ env.RESULTS_DIR }}/
+          retention-days: 14
+
+      - name: 📊 Post summary
+        if: always()
+        run: |
+          echo "## 📈 Résumé Évaluation" >> $GITHUB_STEP_SUMMARY
+          if [ -f "${{ env.RESULTS_DIR }}/results.json" ]; then
+            echo "✅ Résultats disponibles" >> $GITHUB_STEP_SUMMARY
+            echo '```json' >> $GITHUB_STEP_SUMMARY
+            cat ${{ env.RESULTS_DIR }}/results.json >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ Aucun résultat trouvé" >> $GITHUB_STEP_SUMMARY
+          fi
