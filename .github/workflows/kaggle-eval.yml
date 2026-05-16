@@ -48,7 +48,7 @@ jobs:
         run: |
           mkdir -p ${{ env.KAGGLE_KERNEL_DIR }}
           cp -r src config ${{ env.KAGGLE_KERNEL_DIR }}/
-          cp kernel.json ${{ env.KAGGLE_KERNEL_DIR }}/
+          cp kernel-metadata.json ${{ env.KAGGLE_KERNEL_DIR }}/
           echo "✅ Kernel préparé"
 
       - name: 🚀 Submit to Kaggle
