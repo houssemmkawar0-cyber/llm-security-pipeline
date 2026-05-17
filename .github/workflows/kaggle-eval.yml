@@ -19,7 +19,7 @@ jobs:
   submit-to-kaggle:
     runs-on: ubuntu-latest
     timeout-minutes: 120
-    
+
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
@@ -49,54 +49,66 @@ jobs:
           cp kernel-metadata.json ${{ env.KAGGLE_KERNEL_DIR }}/
           echo "✅ Kernel préparé"
 
-      - name: 🚀 Submit to Kaggle (Debug Mode)
+      - name: 🚀 Submit to Kaggle
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           KAGGLE_KERNEL_ID: ${{ secrets.KAGGLE_KERNEL_ID }}
         run: |
           cd ${{ env.KAGGLE_KERNEL_DIR }}
-          
+
           echo "🔍 DEBUG : Liste des fichiers :"
           ls -la
-          
+
           echo "🔍 DEBUG : Contenu de kernel-metadata.json :"
           cat kernel-metadata.json
-          
+
           echo "📤 Push vers Kaggle..."
-          # On utilise la commande CLI standard, mais on capture toute sortie d'erreur
           kaggle kernels push -p . 2>&1 | tee push_output.log
-          
-          # Vérification manuelle du résultat
-          if grep -q "error\|Error\|ERROR\|Exception\|Traceback" push_output.log; then
-            echo "❌ ERREUR DÉTECTÉE DANS LE PUSH :"
+
+          # Détection d'erreur (exclut le Warning de version qui est normal)
+          if grep -v "^Warning:" push_output.log | grep -qiE "error|exception|traceback|expecting value|invalid|failed"; then
+            echo "❌ ERREUR DÉTECTÉE :"
             cat push_output.log
             exit 1
-          else
-            echo "✅ Push réussi !"
           fi
-          
-          echo "⏳ Attente complétion..."
-          timeout 7200 bash -c '
-            while true; do
-              status=$(kaggle kernels status -p . 2>&1 | grep -i "status" | cut -d: -f2 | tr -d " ")
-              echo "   Status: $status"
-              if [[ "$status" == "complete" ]]; then
-                echo "✅ Exécution terminée"
-                exit 0
-              elif [[ "$status" == "error" ]] || [[ "$status" == "failed" ]]; then
-                echo "❌ Échec sur Kaggle"
-                exit 1
-              fi
-              sleep 30
-            done
-          '
-          
+          echo "✅ Push réussi !"
+
+          # Attendre que Kaggle démarre le kernel (délai initial)
+          echo "⏳ Attente démarrage kernel (60s)..."
+          sleep 60
+
+          echo "⏳ Polling du statut..."
+          KERNEL_ID="${{ secrets.KAGGLE_KERNEL_ID }}"
+
+          for i in $(seq 1 240); do
+            RAW=$(kaggle kernels status "$KERNEL_ID" 2>&1)
+            echo "   Raw[$i]: $RAW"
+
+            if echo "$RAW" | grep -qi "complete"; then
+              echo "✅ Exécution terminée"
+              break
+            elif echo "$RAW" | grep -qiE "\berror\b|\bfailed\b"; then
+              echo "❌ Échec sur Kaggle"
+              kaggle kernels output "$KERNEL_ID" -p ../logs_debug || true
+              exit 1
+            fi
+
+            if [ "$i" -eq 240 ]; then
+              echo "⏰ Timeout atteint (2h)"
+              exit 1
+            fi
+
+            echo "   Attente... ($i/240, $((i*30/60))min écoulées)"
+            sleep 30
+          done
+
           echo "📥 Téléchargement résultats..."
           mkdir -p ../${{ env.RESULTS_DIR }}
-          kaggle kernels output -p ../${{ env.RESULTS_DIR }}
+          kaggle kernels output "$KERNEL_ID" -p ../${{ env.RESULTS_DIR }}
           echo "✅ Pipeline terminé"
 
       - name: 📤 Upload results as artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: llm-eval-results-${{ github.run_number }}
@@ -109,6 +121,7 @@ jobs:
           echo "## 📈 Résumé Évaluation" >> $GITHUB_STEP_SUMMARY
           if [ -f "${{ env.RESULTS_DIR }}/results.json" ]; then
             echo "✅ Résultats disponibles" >> $GITHUB_STEP_SUMMARY
+            cat "${{ env.RESULTS_DIR }}/results.json" >> $GITHUB_STEP_SUMMARY
           else
             echo "⚠️ Aucun résultat trouvé" >> $GITHUB_STEP_SUMMARY
           fi
