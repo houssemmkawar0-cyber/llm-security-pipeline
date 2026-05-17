@@ -3,7 +3,7 @@
   "title": "promptfoo ollama yimchi mrigil hamdoulah",
   "code_file": "src/main.py",
   "language": "python",
-  "kernel_type": "notebook",
+  "kernel_type": "script",
   "is_private": true,
   "enable_gpu": true,
   "docker_image": "gcr.io/kaggle-images/python:stable",
