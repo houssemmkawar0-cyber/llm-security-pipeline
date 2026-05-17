@@ -1,12 +1,12 @@
 {
-  "id": "mkawarhoussem/llm-sec-eval-script-v2",
-  "title": "llm-sec-eval-script-v2",
+  "id": "mkawarhoussem/promptfoo-ollama-yimchi-mrigil-hamdoulah",
+  "title": "promptfoo ollama yimchi mrigil hamdoulah",
   "code_file": "src/main.py",
   "language": "python",
   "kernel_type": "script",
   "is_private": true,
   "enable_gpu": true,
-  "docker_image": "gcr.io/kaggle-images/python:stable",
+  "docker_image": "gcr.io/kaggle-images/python:latest",
   "dataset_sources": [],
   "competition_sources": [],
   "kernel_sources": []
