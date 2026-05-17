@@ -63,23 +63,24 @@ jobs:
           cat kernel-metadata.json
           
           echo "📤 Push vers Kaggle..."
-          # On utilise la commande CLI standard, mais on capture toute sortie d'erreur
           kaggle kernels push -p . 2>&1 | tee push_output.log
           
-          # Vérification manuelle du résultat
-          if grep -q "error\|Error\|ERROR\|Exception\|Traceback" push_output.log; then
-            echo "❌ ERREUR DÉTECTÉE DANS LE PUSH :"
+          # ✅ CORRECTION 1 : Détection d'erreur améliorée (catch JSON parse errors)
+          if grep -qiE "error|exception|traceback|expecting value|invalid|failed" push_output.log; then
+            echo "❌ ERREUR DÉTECTÉE :"
             cat push_output.log
             exit 1
-          else
-            echo "✅ Push réussi !"
           fi
+          echo "✅ Push réussi !"
           
           echo "⏳ Attente complétion..."
           timeout 7200 bash -c '
             while true; do
-              status=$(kaggle kernels status -p . 2>&1 | grep -i "status" | cut -d: -f2 | tr -d " ")
-              echo "   Status: $status"
+              # ✅ CORRECTION 2 : Utiliser l'ID du kernel pour le status (pas -p .)
+              status=$(kaggle kernels status ${{ secrets.KAGGLE_KERNEL_ID }} 2>&1 \
+                | grep -oiE "running|complete|error|failed|queued" \
+                | head -1 | tr "[:upper:]" "[:lower:]")
+              echo "   Status: ${status:-inconnu}"
               if [[ "$status" == "complete" ]]; then
                 echo "✅ Exécution terminée"
                 exit 0
@@ -93,7 +94,8 @@ jobs:
           
           echo "📥 Téléchargement résultats..."
           mkdir -p ../${{ env.RESULTS_DIR }}
-          kaggle kernels output -p ../${{ env.RESULTS_DIR }}
+          # ✅ CORRECTION 3 : Utiliser l'ID du kernel pour le download
+          kaggle kernels output ${{ secrets.KAGGLE_KERNEL_ID }} -p ../${{ env.RESULTS_DIR }}
           echo "✅ Pipeline terminé"
 
       - name: 📤 Upload results as artifact
