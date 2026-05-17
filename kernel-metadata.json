@@ -1,6 +1,6 @@
 {
-  "id": "mkawarhoussem/promptfoo-ollama-yimchi-mrigil-hamdoulah",
-  "title": "promptfoo ollama yimchi mrigil hamdoulah",
+  "id": "mkawarhoussem/llm-sec-eval-script-v2",
+  "title": "llm-sec-eval-script-v2",
   "code_file": "src/main.py",
   "language": "python",
   "kernel_type": "script",
