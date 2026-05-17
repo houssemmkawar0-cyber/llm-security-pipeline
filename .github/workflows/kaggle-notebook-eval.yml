@@ -1,0 +1,120 @@
+name: 🤖 Exécution Automatique Notebook Kaggle
+
+on:
+  # Déclenchement manuel depuis GitHub
+  workflow_dispatch:
+  
+  # Déclenchement automatique tous les jours à 9h
+  schedule:
+    - cron: '0 9 * * *'
+  
+  # Déclenchement quand on modifie le notebook
+  push:
+    branches: [main]
+    paths:
+      - 'kaggle_kernel/**'
+      - '.github/workflows/kaggle-notebook-eval.yml'
+
+jobs:
+  run-kaggle-notebook:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    
+    steps:
+      - name: 📥 Checkout du code
+        uses: actions/checkout@v4
+      
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      
+      - name: 📦 Installation Kaggle CLI
+        run: |
+          pip install kaggle
+      
+      - name: 🔐 Configuration Kaggle
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: |
+          mkdir -p ~/.kaggle
+          echo '{"username":"'"$KAGGLE_USERNAME"'","key":"'"$KAGGLE_KEY"'"}' > ~/.kaggle/kaggle.json
+          chmod 600 ~/.kaggle/kaggle.json
+      
+      - name: 📤 Push du notebook vers Kaggle
+        run: |
+          cd kaggle_kernel
+          kaggle kernels push -p .
+          echo "✅ Notebook envoyé à Kaggle"
+      
+      - name: ⏳ Attente du démarrage
+        run: |
+          echo "⏳ Attente du démarrage de l'exécution..."
+          sleep 30
+      
+      - name: 🔄 Polling du statut
+        run: |
+          NOTEBOOK_ID="mkawarhoussem/promptfoo-ollama-yimchi-mrigil-hamdoulah"
+          
+          echo "📊 Surveillance de l'exécution..."
+          
+          for i in {1..60}; do
+            STATUS=$(kaggle kernels status "$NOTEBOOK_ID" 2>&1)
+            echo "[$i/60] Statut: $STATUS"
+            
+            if echo "$STATUS" | grep -qi "complete"; then
+              echo "✅ Notebook exécuté avec succès!"
+              break
+            elif echo "$STATUS" | grep -qiE "error|failed"; then
+              echo "❌ Échec de l'exécution"
+              exit 1
+            fi
+            
+            sleep 30
+          done
+      
+      - name: 📥 Téléchargement des résultats
+        run: |
+          mkdir -p ./results
+          kaggle kernels output "mkawarhoussem/promptfoo-ollama-yimchi-mrigil-hamdoulah" --path ./results
+          echo "✅ Résultats téléchargés"
+      
+      - name: 📊 Affichage des résultats
+        run: |
+          if [ -f "./results/results.json" ]; then
+            echo "## 📊 Résultats de l'évaluation" >> $GITHUB_STEP_SUMMARY
+            echo '```json' >> $GITHUB_STEP_SUMMARY
+            cat "./results/results.json" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            
+            # Extraire le verdict
+            JAILBREAK=$(jq -r '.is_jailbreak' ./results/results.json)
+            ASR=$(jq -r '.asr' ./results/results.json)
+            
+            if [ "$JAILBREAK" = "true" ]; then
+              echo "**🔓 JAILBREAK DÉTECTÉ**" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "**🛡️ SAFE**" >> $GITHUB_STEP_SUMMARY
+            fi
+            echo "**📈 ASR: ${ASR}%**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ Aucun résultat trouvé" >> $GITHUB_STEP_SUMMARY
+          fi
+      
+      - name: 📤 Upload des résultats comme artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: notebook-results-${{ github.run_number }}
+          path: ./results/
+          retention-days: 30
+      
+      - name: 🔔 Notification de fin
+        if: always()
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then
+            echo "✅ Pipeline exécuté avec succès!"
+          else
+            echo "❌ Pipeline échoué"
+          fi
